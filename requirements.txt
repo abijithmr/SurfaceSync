@@ -1,0 +1,64 @@
+# =============================================================================
+#  SurfaceSync - Python Dependencies
+#  Install with: pip install -r requirements.txt
+#
+#  Tested on Python 3.10 / 3.11 / 3.12
+#  Windows (cp1252 safe), Linux, macOS
+# =============================================================================
+
+# ── Web server & real-time communication ─────────────────────────────────────
+flask==3.0.3
+flask-socketio==5.3.6
+flask-cors==4.0.1
+python-socketio==5.11.3
+python-engineio==4.9.1
+
+# ── WSGI / async backend for SocketIO threading mode ─────────────────────────
+eventlet==0.36.1
+
+# ── Serial communication (USB <-> ESP32) ─────────────────────────────────────
+pyserial==3.5
+
+# ── Cryptography (AES-256-CBC, SHA-256) ──────────────────────────────────────
+pycryptodome==3.20.0
+
+# ── Numerical / DSP ───────────────────────────────────────────────────────────
+numpy==1.26.4
+scipy==1.13.1
+
+# ── HTTP requests (RX backend -> TX backend surface feedback) ─────────────────
+requests==2.32.3
+
+# ── AI / CNN noise filter ─────────────────────────────────────────────────────
+# TensorFlow includes Keras. Use the CPU-only build if no NVIDIA GPU is present.
+# GPU build (optional, faster CNN inference):
+#   pip install tensorflow[and-cuda]==2.17.0
+tensorflow==2.17.0
+
+# =============================================================================
+#  QUICK INSTALL GUIDE
+# =============================================================================
+#
+#  1. Make sure Python 3.10+ is installed:
+#       python --version
+#
+#  2. (Recommended) Create a virtual environment first:
+#       python -m venv venv
+#       venv\Scripts\activate        # Windows
+#       source venv/bin/activate     # Linux / macOS
+#
+#  3. Install all dependencies:
+#       pip install -r requirements.txt
+#
+#  4. If TensorFlow install fails on older hardware try the lighter build:
+#       pip install tensorflow-cpu==2.17.0
+#
+#  5. Run the backends (two separate terminals):
+#       python transmitter_backend.py    # Terminal 1 - Laptop TX side
+#       python receiver_backend.py       # Terminal 2 - Laptop RX side
+#
+#  6. Open the HTML frontends in your browser:
+#       transmitter.html  ->  connects to http://localhost:5001
+#       reciever.html     ->  connects to http://localhost:5002
+#
+# =============================================================================

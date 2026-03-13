@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SurfaceSync | Receiver</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+    <!-- Custom Config for Tailwind -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: {
+                        glass: '#F2F2F7',
+                        surface: '#FFFFFF',
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'pulse-fast': 'pulse 0.8s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Base Styles */
+        body {
+            background-color: #F2F2F7;
+            color: #1d1d1f;
+            overflow-x: hidden;
+            user-select: none;
+        }
+
+        ::selection {
+            background-color: #BFDBFE; /* blue-200 */
+            color: #1e3a8a;
+        }
+
+        /* Liquid Glass Background Spheres */
+        .ambient-light {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(80px);
+            z-index: -1;
+            opacity: 0.6;
+            animation: float 10s ease-in-out infinite;
+        }
+
+        .light-1 { top: -10%; left: -10%; width: 50vw; height: 50vw; background: rgba(96, 165, 250, 0.4); } /* blue-400 */
+        .light-2 { bottom: -10%; right: -10%; width: 60vw; height: 60vw; background: rgba(216, 180, 254, 0.3); } /* purple-300 */
+        .light-3 { top: 40%; left: 30%; width: 40vw; height: 40vw; background: rgba(209, 250, 229, 0.4); animation-delay: -5s; } /* green-200 */
+
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0); }
+            50% { transform: translate(20px, -20px); }
+        }
+
+        /* Glassmorphism Cards */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.65);
+            backdrop-filter: blur(45px);
+            -webkit-backdrop-filter: blur(45px);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.05);
+        }
+
+        /* Custom Scrollbar for Logs */
+        .log-scroll::-webkit-scrollbar {
+            width: 6px;
+        }
+        .log-scroll::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .log-scroll::-webkit-scrollbar-thumb {
+            background-color: rgba(0, 0, 0, 0.1);
+            border-radius: 20px;
+        }
+
+        /* Canvas Smoothing */
+        canvas {
+            image-rendering: -webkit-optimize-contrast;
+        }
+
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(5px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .modal-content {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(20px);
+            border-radius: 24px;
+            padding: 2rem;
+            max-width: 500px;
+            width: 90%;
+            transform: scale(0.9);
+            transition: transform 0.3s ease;
+        }
+
+        .modal-overlay.active .modal-content {
+            transform: scale(1);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4 md:p-8">
+
+    <!-- Ambient Background -->
+    <div class="ambient-light light-1"></div>
+    <div class="ambient-light light-2"></div>
+    <div class="ambient-light light-3"></div>
+
+    <!-- Main Dashboard Grid -->
+    <main class="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- Header / Status (Full Width Top) -->
+        <header class="lg:col-span-12 glass-card rounded-3xl p-6 flex justify-between items-center">
+            <div class="flex items-center gap-4">
+                <!-- Status Light - Changes based on receiving state -->
+                <div id="statusLight" class="w-3 h-3 rounded-full bg-gray-400 shadow-[0_0_15px_rgba(156,163,175,0.6)]"></div>
+                <h1 class="text-2xl font-semibold tracking-tight text-gray-800">SurfaceSync <span class="text-gray-400 font-light">| Receiver</span></h1>
+            </div>
+            <div class="flex items-center gap-3 px-4 py-2 bg-white/40 rounded-full border border-white/50">
+                <span id="systemStatus" class="text-sm font-medium text-gray-600">System: Idle</span>
+            </div>
+        </header>
+
+        <!-- Left Column: Visualizer & Stats -->
+        <section class="lg:col-span-4 flex flex-col gap-6">
+            
+            <!-- Waveform Visualizer -->
+            <div class="glass-card rounded-3xl p-1 overflow-hidden relative h-64">
+                <div class="absolute top-4 left-4 z-10">
+                    <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Acoustic Input</p>
+                </div>
+                <canvas id="waveformCanvas" class="w-full h-full rounded-2xl"></canvas>
+            </div>
+
+            <!-- Data Stats Grid -->
+            <div class="grid grid-cols-2 gap-4">
+                <!-- ECC Card -->
+                <div class="glass-card rounded-2xl p-5 flex flex-col justify-between">
+                    <p class="text-xs text-gray-500 font-medium">ECC Repairs</p>
+                    <div class="flex items-end gap-2 mt-2">
+                        <span id="eccCount" class="text-3xl font-bold text-gray-800">0</span>
+                        <span class="text-xs text-green-600 mb-1">Corrected</span>
+                    </div>
+                </div>
+                <!-- Signal Strength -->
+                <div class="glass-card rounded-2xl p-5 flex flex-col justify-between">
+                    <p class="text-xs text-gray-500 font-medium">Signal Strength</p>
+                    <div class="w-full bg-gray-200/50 rounded-full h-2 mt-3 overflow-hidden">
+                        <div id="signalBar" class="bg-blue-500 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                    </div>
+                    <p id="signalText" class="text-xs text-right mt-1 text-gray-400">-∞ dB</p>
+                </div>
+                <!-- Frequency -->
+                <div class="glass-card rounded-2xl p-5 col-span-2 flex justify-between items-center">
+                    <div>
+                        <p class="text-xs text-gray-500 font-medium">Current Frequency</p>
+                        <p id="freqDisplay" class="text-xl font-semibold text-gray-800">0 Hz</p>
+                    </div>
+                    <div class="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                        </svg>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Right Column: Image Reconstruction & Logs -->
+        <section class="lg:col-span-8 flex flex-col gap-6">
+            
+            <!-- Image Reconstruction Area -->
+            <div class="glass-card rounded-3xl p-2 flex-grow min-h-[400px] relative overflow-hidden group">
+                <div class="absolute inset-0 bg-gray-100/50 z-0 flex items-center justify-center">
+                    <!-- Placeholder Pattern -->
+                    <div class="text-center opacity-30">
+                        <svg class="w-16 h-16 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                        <p class="text-sm font-medium">Waiting for transmission...</p>
+                    </div>
+                </div>
+
+                <!-- The Reconstructed Image -->
+                <img id="reconstructedImage" src="" alt="Received Data" class="absolute inset-0 w-full h-full object-cover z-10 opacity-0 transition-opacity duration-700" />
+                
+                <!-- Scanning Line Effect -->
+                <div id="scanLine" class="absolute top-0 left-0 w-full h-1 bg-blue-400/50 shadow-[0_0_15px_rgba(96,165,250,0.8)] z-20 translate-y-[-100%]"></div>
+
+                <!-- Progress Overlay -->
+                <div id="progressOverlay" class="absolute bottom-6 left-6 right-6 z-30 hidden">
+                    <div class="flex justify-between text-xs font-medium text-white mb-1 drop-shadow-md">
+                        <span>Reconstructing 1080p Stream</span>
+                        <span id="progressPercent">0%</span>
+                    </div>
+                    <div class="w-full bg-black/20 backdrop-blur-sm rounded-full h-1.5 overflow-hidden">
+                        <div id="imageProgressBar" class="bg-white h-1.5 rounded-full transition-all duration-200" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Log Window -->
+            <div class="glass-card rounded-2xl p-4 h-48 flex flex-col">
+                <div class="flex justify-between items-center mb-2 border-b border-gray-200/50 pb-2">
+                    <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">System Log</p>
+                    <button onclick="clearLogs()" class="text-xs text-blue-500 hover:text-blue-600 cursor-pointer">Clear</button>
+                </div>
+                <div id="logWindow" class="log-scroll flex-grow overflow-y-auto font-mono text-xs space-y-1 text-gray-600">
+                    <div class="log-entry"><span class="text-gray-400">[SYS]</span> System ready. Click "Initialize" to start listening...</div>
+                </div>
+            </div>
+
+            <!-- Message Display Button -->
+            <button id="messageBtn" onclick="showMessage()" disabled class="w-full py-4 bg-gray-300 hover:bg-gray-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all rounded-2xl text-gray-700 font-medium shadow-lg flex items-center justify-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                </svg>
+                <span id="messageBtnText">No Message Received Yet</span>
+            </button>
+        </section>
+
+    </main>
+
+    <!-- Message Modal -->
+    <div id="messageModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-semibold text-gray-800">Received Message</h3>
+                <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div id="modalMessageContent" class="text-gray-700 leading-relaxed whitespace-pre-wrap">
+                <!-- Message will be inserted here -->
+            </div>
+            <div class="mt-6 flex justify-end">
+                <button onclick="closeModal()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Logic Script -->
+    <script>
+        // --- Configuration ---
+        const CONFIG = {
+            fftSize: 2048,
+            smoothing: 0.8,
+            chunkSize: 1024, // Simulated data chunk size
+            totalChunks: 450 // Simulated total chunks for a 1080p image
+        };
+
+        // --- State ---
+        let audioContext;
+        let analyser;
+        let microphone;
+        let dataArray;
+        let isListening = false;
+        let isReceiving = false; // Track if actively receiving data
+        let simulationInterval;
+        let receivedMessage = ""; // Store the received message
+        
+        // DOM Elements
+        const canvas = document.getElementById('waveformCanvas');
+        const canvasCtx = canvas.getContext('2d');
+        const statusLight = document.getElementById('statusLight');
+        const systemStatus = document.getElementById('systemStatus');
+        const messageBtn = document.getElementById('messageBtn');
+        const messageBtnText = document.getElementById('messageBtnText');
+        const messageModal = document.getElementById('messageModal');
+        const modalMessageContent = document.getElementById('modalMessageContent');
+        const logWindow = document.getElementById('logWindow');
+        const eccCountEl = document.getElementById('eccCount');
+        const signalBar = document.getElementById('signalBar');
+        const signalText = document.getElementById('signalText');
+        const freqDisplay = document.getElementById('freqDisplay');
+        const reconstructedImage = document.getElementById('reconstructedImage');
+        const progressOverlay = document.getElementById('progressOverlay');
+        const imageProgressBar = document.getElementById('imageProgressBar');
+        const progressPercent = document.getElementById('progressPercent');
+        const scanLine = document.getElementById('scanLine');
+
+        // --- Initialization ---
+        function resizeCanvas() {
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // --- Logging System ---
+        function addLog(message, type = 'INFO') {
+            const div = document.createElement('div');
+            div.className = 'log-entry flex gap-2';
+            const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute:'2-digit', second:'2-digit' }) + '.' + Math.floor(Math.random()*999);
+            
+            let colorClass = 'text-gray-400';
+            if(type === 'SUCCESS') colorClass = 'text-green-600';
+            if(type === 'DATA') colorClass = 'text-blue-600';
+            if(type === 'ERROR') colorClass = 'text-red-500';
+
+            div.innerHTML = `<span class="${colorClass}">[${timestamp}]</span> <span>${message}</span>`;
+            logWindow.appendChild(div);
+            logWindow.scrollTop = logWindow.scrollHeight;
+        }
+
+        function clearLogs() {
+            logWindow.innerHTML = '';
+            addLog('Log cleared by user.');
+        }
+
+        // --- Status Light Management ---
+        function updateStatusLight(receiving) {
+            isReceiving = receiving;
+            
+            if (receiving) {
+                // Blinking green when receiving
+                statusLight.className = 'w-3 h-3 rounded-full bg-green-500 shadow-[0_0_15px_rgba(34,197,94,0.6)] animate-pulse-fast';
+                systemStatus.textContent = 'System: Receiving...';
+                systemStatus.className = 'text-sm font-medium text-green-600';
+            } else if (isListening) {
+                // Solid gray when listening but not receiving
+                statusLight.className = 'w-3 h-3 rounded-full bg-gray-400 shadow-[0_0_15px_rgba(156,163,175,0.6)]';
+                systemStatus.textContent = 'System: Listening...';
+                systemStatus.className = 'text-sm font-medium text-gray-600';
+            } else {
+                // Off when idle
+                statusLight.className = 'w-3 h-3 rounded-full bg-gray-300';
+                systemStatus.textContent = 'System: Idle';
+                systemStatus.className = 'text-sm font-medium text-gray-400';
+            }
+        }
+
+        // --- Core Audio Logic ---
+        async function startListening() {
+            try {
+                addLog('Requesting microphone access...', 'INFO');
+                
+                // Request Audio Input
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: { 
+                        echoCancellation: false, 
+                        noiseSuppression: false, 
+                        autoGainControl: false 
+                    } 
+                });
+
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = CONFIG.fftSize;
+                analyser.smoothingTimeConstant = CONFIG.smoothing;
+
+                microphone = audioContext.createMediaStreamSource(stream);
+                microphone.connect(analyser);
+
+                dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+                isListening = true;
+                updateStatusLight(false); // Start in listening mode (not receiving)
+                addLog('Audio context initialized. Listening for surface vibrations...', 'SUCCESS');
+                
+                // Start Visualization Loop
+                drawWaveform();
+                
+                // Start Simulated Data Reception (Since we don't have a real acoustic modem transmitter yet)
+                simulateAcousticTransmission();
+
+            } catch (err) {
+                console.error(err);
+                addLog(`Error: ${err.message}. Please allow microphone access.`, 'ERROR');
+                alert("Microphone access is required to receive acoustic data.");
+            }
+        }
+
+        // --- Visualization Loop ---
+        function drawWaveform() {
+            if (!isListening) return;
+
+            requestAnimationFrame(drawWaveform);
+
+            analyser.getByteTimeDomainData(dataArray);
+
+            canvasCtx.fillStyle = 'rgba(255, 255, 255, 0.1)'; // Fade effect
+            canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+
+            canvasCtx.lineWidth = 2;
+            canvasCtx.strokeStyle = '#3B82F6'; // Blue-500
+            canvasCtx.beginPath();
+
+            const sliceWidth = canvas.width * 1.0 / CONFIG.fftSize;
+            let x = 0;
+
+            let sum = 0;
+            let maxVal = 0;
+
+            for (let i = 0; i < CONFIG.fftSize; i++) {
+                const v = dataArray[i] / 128.0;
+                const y = v * canvas.height / 2;
+
+                // Calculate stats for UI
+                const deviation = Math.abs(v - 1);
+                sum += deviation;
+                if(deviation > maxVal) maxVal = deviation;
+
+                if (i === 0) {
+                    canvasCtx.moveTo(x, y);
+                } else {
+                    canvasCtx.lineTo(x, y);
+                }
+
+                x += sliceWidth;
+            }
+
+            canvasCtx.lineTo(canvas.width, canvas.height / 2);
+            canvasCtx.stroke();
+
+            // Update UI Stats based on audio input
+            updateStats(sum, maxVal);
+        }
+
+        function updateStats(avgVolume, peakVolume) {
+            // Map volume to dB roughly
+            const db = -100 + (avgVolume * 2); 
+            const formattedDb = Math.min(0, Math.max(-100, db)).toFixed(1);
+            
+            signalText.innerText = `${formattedDb} dB`;
+            
+            // Map to percentage for bar (assuming -60dB is good signal)
+            let percent = ((db + 100) / 60) * 100;
+            percent = Math.min(100, Math.max(0, percent));
+            signalBar.style.width = `${percent}%`;
+
+            // Randomize frequency display slightly based on peak for visual flair
+            if(peakVolume > 0.5) {
+                const baseFreq = 1400; // Example carrier frequency
+                const jitter = Math.floor(Math.random() * 50);
+                freqDisplay.innerText = `${baseFreq + jitter} Hz`;
+            }
+        }
+
+        // --- Simulated Data Processing (The "Modem" Logic) ---
+        // In a real scenario, this would be replaced by an FFT decoder looking for specific frequencies
+        let receivedChunks = 0;
+        let eccRepairs = 0;
+
+        function simulateAcousticTransmission() {
+            addLog('Detected carrier signal. Starting reception...', 'DATA');
+            updateStatusLight(true); // Start blinking green
+            
+            simulationInterval = setInterval(() => {
+                if (!isListening) return;
+
+                // Simulate receiving a chunk
+                const success = Math.random() > 0.1; // 90% success rate
+                
+                if (success) {
+                    receivedChunks++;
+                    processIncomingChunk(receivedChunks);
+                } else {
+                    // Simulate error correction
+                    eccRepairs++;
+                    eccCountEl.innerText = eccRepairs;
+                    addLog(`Chunk #${receivedChunks + 1} corrupted. ECC Reed-Solomon repair initiated...`, 'ERROR');
+                    setTimeout(() => {
+                        receivedChunks++;
+                        processIncomingChunk(receivedChunks);
+                        addLog(`Chunk #${receivedChunks} repaired successfully.`, 'SUCCESS');
+                    }, 200);
+                }
+
+            }, 100); // Speed of simulation
+        }
+
+        function processIncomingChunk(chunkIndex) {
+            const progress = Math.min((chunkIndex / CONFIG.totalChunks) * 100, 100);
+            
+            // Update Progress Bar
+            imageProgressBar.style.width = `${progress}%`;
+            progressPercent.innerText = `${Math.floor(progress)}%`;
+            
+            if (!progressOverlay.classList.contains('block')) {
+                progressOverlay.classList.remove('hidden');
+                progressOverlay.classList.add('block');
+            }
+
+            // Simulate Image Reveal (Top to Bottom)
+            if (progress > 5 && reconstructedImage.style.opacity === '0') {
+                // Start revealing
+                scanLine.style.transition = `transform ${2000 / (100 - progress)}s linear`;
+                scanLine.style.transform = `translateY(${progress * 5}px)`; // Simple visual trick
+                
+                // In a real app, we would draw pixels to a canvas here
+                // For demo, we fade in a placeholder image once done
+                if (progress >= 100) {
+                    finishTransmission();
+                }
+            }
+            
+            // Log occasionally to avoid spam
+            if (chunkIndex % 50 === 0) {
+                addLog(`Chunk #${chunkIndex} decrypted via AES-256. Buffer updated.`, 'DATA');
+            }
+        }
+
+        function finishTransmission() {
+            clearInterval(simulationInterval);
+            updateStatusLight(false); // Stop blinking, go back to listening state
+            addLog('Transmission complete. Assembling image layers...', 'SUCCESS');
+            
+            // Set a dummy image for demonstration (In real app, this is the reconstructed blob)
+            // Using a high-quality unsplash image to represent the 1080p result
+            reconstructedImage.src = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2564&auto=format&fit=crop';
+            
+            setTimeout(() => {
+                reconstructedImage.style.opacity = '1';
+                scanLine.style.display = 'none';
+                addLog('Image rendered successfully.', 'SUCCESS');
+                
+                // Enable the message button with a sample message
+                receivedMessage = "Hello from the Sender!\n\nThis message was transmitted acoustically through surface vibrations.\n\nTransmission completed successfully at " + new Date().toLocaleTimeString();
+                messageBtnText.innerText = "View Received Message";
+                messageBtn.disabled = false;
+                messageBtn.classList.remove('bg-gray-300', 'hover:bg-gray-400', 'text-gray-700');
+                messageBtn.classList.add('bg-blue-600', 'hover:bg-blue-700', 'text-white');
+                
+            }, 500);
+        }
+
+        // --- Message Display Functions ---
+        function showMessage() {
+            if (receivedMessage) {
+                modalMessageContent.innerText = receivedMessage;
+                messageModal.classList.add('active');
+            }
+        }
+
+        function closeModal() {
+            messageModal.classList.remove('active');
+        }
+
+        // Close modal when clicking outside
+        messageModal.addEventListener('click', (e) => {
+            if (e.target === messageModal) {
+                closeModal();
+            }
+        });
+
+        // Close modal with Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && messageModal.classList.contains('active')) {
+                closeModal();
+            }
+        });
+
+    </script>
+</body>
+</html>
