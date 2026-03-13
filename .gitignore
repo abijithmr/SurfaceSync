@@ -1,0 +1,20 @@
+# --- Compiled Files ---
+*.exe
+*.o
+*.out
+*.bin
+*.elf
+
+# --- Hardware/IDE Folders ---
+.vscode/
+.pio/
+.build/
+.pnp/
+
+# --- System Files ---
+.DS_Store
+Thumbs.db
+
+# --- Sensitive Data ---
+.env
+secrets.h
